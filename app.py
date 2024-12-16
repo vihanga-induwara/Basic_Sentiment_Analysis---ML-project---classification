@@ -1,49 +1,53 @@
-from flask import Flask, render_template,request, redirect
+from flask import Flask, render_template, request, redirect, flash
 from helper import preprocessing, vectorizer, get_prediction
 from logger import logging
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key'  # Required for flashing messages
 
 logging.info('Flask server started')
 
-data = dict()
-reviews = []
-positive = 0
-negative = 0
+# Data storage using dictionaries
+data = {"reviews": [], "positive": 0, "negative": 0}
 
 @app.route("/")
 def index():
-    data['reviews'] = reviews
-    data['positive'] = positive
-    data['negative'] = negative
-
     logging.info('========== Open home page ============')
-
     return render_template('index.html', data=data)
 
-@app.route("/", methods = ['post'])
+@app.route("/", methods=['POST'])
 def my_post():
-    text = request.form['text']
+    text = request.form.get('text', '').strip()
+    if not text:
+        flash("Please enter a review!", "warning")
+        logging.warning('Empty input received')
+        return redirect(request.url)
+
     logging.info(f'Text : {text}')
-
-    preprocessed_txt = preprocessing(text)
-    logging.info(f'Preprocessed Text : {preprocessed_txt}')
-
-    vectorized_txt = vectorizer(preprocessed_txt)
-    logging.info(f'Vectorized Text : {vectorized_txt}')
-
-    prediction = get_prediction(vectorized_txt)
-    logging.info(f'Prediction : {prediction}')
-
-    if prediction == 'negative':
-        global negative
-        negative += 1
-    else:
-        global positive
-        positive += 1
     
-    reviews.insert(0, text)
+    try:
+        preprocessed_txt = preprocessing(text)
+        logging.info(f'Preprocessed Text : {preprocessed_txt}')
+        
+        vectorized_txt = vectorizer(preprocessed_txt)
+        logging.info(f'Vectorized Text : {vectorized_txt}')
+        
+        prediction = get_prediction(vectorized_txt)
+        logging.info(f'Prediction : {prediction}')
+        
+        if prediction == 'negative':
+            data['negative'] += 1
+        else:
+            data['positive'] += 1
+        
+        data['reviews'].insert(0, text)
+        
+    except Exception as e:
+        logging.error(f"Error during prediction: {e}")
+        flash("An error occurred during processing. Please try again.", "danger")
+        return redirect(request.url)
+    
     return redirect(request.url)
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
